@@ -1,6 +1,7 @@
 # Ignore input and output directories
 input/
 output/
+scripts/
 
 # Ignore all subfolders within scripts
 
