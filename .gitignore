@@ -1,0 +1,11 @@
+# Ignore input and output directories
+input/
+output/
+
+# Ignore all subfolders within scripts
+
+# Ignore .env file
+.env
+
+# Ignore virtual environment directory
+venv/

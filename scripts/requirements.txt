@@ -1,0 +1,10 @@
+openai
+lxml
+python-dotenv
+bs4
+python-dotenv
+openai
+tiktoken
+lxml
+streamlit
+ebooklib
