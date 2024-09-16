@@ -15,30 +15,36 @@ st.set_page_config(page_title="EPUB Translator", layout="wide")
 
 # Function to get API key from environment or user input
 def get_api_key(key_name, env_var_name):
-    api_key = os.getenv(env_var_name)
+    try:
+        api_key = os.getenv(env_var_name)
+    except Exception as e:
+        st.error(f"Error accessing environment variables: {str(e)}")
+        api_key = None
+    
     if not api_key:
-        # Prompt user to input API key if not found in environment
+        st.warning(f"{key_name} API key not found in environment variables.")
         api_key = st.text_input(f"Enter your {key_name} API key:", type="password")
+    
     return api_key
 
 def main():
     st.title("EPUB Translator")
 
-    # Set up API keys
+    # Set up API key
     OPENAI_API_KEY = get_api_key("OpenAI", 'OPENAI_API_KEY')
+    
+    if not OPENAI_API_KEY:
+        st.error("OpenAI API key is required to use this application.")
+        st.stop()
+
     OPENAI_MODEL = st.text_input("Enter your OpenAI model (e.g., gpt-3.5-turbo):", value="gpt-3.5-turbo")
 
     # Initialize client
-    client = None
-    if OPENAI_API_KEY:
-        try:
-            client = OpenAI(api_key=OPENAI_API_KEY)
-        except Exception as e:
-            st.error(f"Failed to initialize OpenAI client: {str(e)}")
-            return
-    else:
-        st.warning("Please enter your OpenAI API key to use the application.")
-        return
+    try:
+        client = OpenAI(api_key=OPENAI_API_KEY)
+    except Exception as e:
+        st.error(f"Failed to initialize OpenAI client: {str(e)}")
+        st.stop()
 
     # File upload
     uploaded_file = st.file_uploader("Upload an EPUB file", type="epub")
@@ -57,7 +63,7 @@ def main():
                 xhtml_path, ncx_file_path, opf_file_path = process_epub(epub_path, output_path, backup_path)
             except Exception as e:
                 st.error(f"Error processing EPUB file: {str(e)}")
-                return
+                st.stop()
 
             # Language selection
             source_lang = st.selectbox("Select source language", ["English", "Spanish", "French", "German"])
@@ -94,7 +100,7 @@ def main():
                                 progress_bar.progress(progress)
                     except Exception as e:
                         st.error(f"Error during translation: {str(e)}")
-                        return
+                        st.stop()
 
                 st.success("Translation completed!")
 
@@ -104,7 +110,7 @@ def main():
                     create_epub(output_path, translated_epub_path)
                 except Exception as e:
                     st.error(f"Error creating translated EPUB: {str(e)}")
-                    return
+                    st.stop()
 
                 # Offer download of the translated EPUB
                 with open(translated_epub_path, "rb") as file:
