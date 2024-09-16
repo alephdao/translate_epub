@@ -1,10 +1,11 @@
 import streamlit as st
 import os
 import tempfile
-from dotenv import load_dotenv  # Import dotenv to load environment variables
+from dotenv import load_dotenv
 from epub_extract import process_epub
 from epub_create import create_epub
 from translate import main as translate
+from openai import OpenAI
 
 # Load environment variables from .env file
 load_dotenv()
@@ -12,20 +13,36 @@ load_dotenv()
 def main():
     st.title("EPUB Translator")
 
-    # Check for API key and model in environment variables
-    api_key = os.getenv("OPENAI_MODEL")
+    # Check for API key in environment variables
+    api_key = os.getenv("OPENAI_API_KEY")
+    
+    # If API key is not in environment, prompt user to input it
+    if not api_key:
+        api_key = st.text_input("Enter your OpenAI API Key:", type="password")
+        if not api_key:
+            st.warning("Please enter a valid OpenAI API key to proceed.")
+            return
+
+    # Initialize OpenAI client only when API key is available
+    client = None
+    if api_key:
+        try:
+            client = OpenAI(api_key=api_key)
+        except Exception as e:
+            st.error(f"Failed to initialize OpenAI client: {e}")
+            return
+
+    # Check for model in environment variables
     openai_model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # Default to gpt-4o-mini
 
-    # Prompt user for API key and model if not set
-    if not api_key:
-        api_key = st.text_input("Enter your OpenAI API Key:")
+    # Prompt user for model if not set
     if not openai_model:
         openai_model = st.selectbox("Select OpenAI model:", ["gpt-3.5-turbo", "gpt-4o-mini", "gpt-4"])
 
     # File upload
     uploaded_file = st.file_uploader("Upload an EPUB file", type="epub")
 
-    if uploaded_file is not None:
+    if uploaded_file is not None and client is not None:
         # Create a temporary directory to store the uploaded file
         with tempfile.TemporaryDirectory() as temp_dir:
             epub_path = os.path.join(temp_dir, uploaded_file.name)
@@ -56,16 +73,16 @@ def main():
                     translated_paragraphs = 0
                     
                     if all_files:
-                        translate(xhtml_path, source_lang, target_lang, api_key, openai_model)  # Pass API key and model
-                        translated_paragraphs += total_paragraphs  # Update count for all files
+                        translate(xhtml_path, source_lang, target_lang, client, openai_model)
+                        translated_paragraphs += total_paragraphs
                     else:
                         for file in files_to_translate:
-                            translate(os.path.join(xhtml_path, file), source_lang, target_lang, api_key, openai_model)  # Pass API key and model
-                            translated_paragraphs += len(open(os.path.join(xhtml_path, file)).read().split('<p>')) - 1  # Update count for specific files
+                            translate(os.path.join(xhtml_path, file), source_lang, target_lang, client, openai_model)
+                            translated_paragraphs += len(open(os.path.join(xhtml_path, file)).read().split('<p>')) - 1
                             
                             # Update progress bar
                             progress = (translated_paragraphs / total_paragraphs) * 100
-                            st.progress(progress)  # Update the progress bar
+                            st.progress(progress)
 
                 st.success("Translation completed!")
 
