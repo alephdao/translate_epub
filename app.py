@@ -4,7 +4,7 @@ import tempfile
 from dotenv import load_dotenv
 from epub_extract import process_epub
 from epub_create import create_epub
-from translate import main as translate
+from translate import translate_text
 from openai import OpenAI
 
 # Load environment variables from .env file
@@ -26,11 +26,16 @@ def main():
 
     # Set up API keys
     OPENAI_API_KEY = get_api_key("OpenAI", 'OPENAI_API_KEY')
-    OPENAI_MODEL = st.text_input("Enter your OpenAI model (e.g., gpt-4o-mini):", value="gpt-4o-mini")
+    OPENAI_MODEL = st.text_input("Enter your OpenAI model (e.g., gpt-3.5-turbo):", value="gpt-3.5-turbo")
 
     # Initialize client
+    client = None
     if OPENAI_API_KEY:
-        client = OpenAI(api_key=OPENAI_API_KEY)
+        try:
+            client = OpenAI(api_key=OPENAI_API_KEY)
+        except Exception as e:
+            st.error(f"Failed to initialize OpenAI client: {str(e)}")
+            return
     else:
         st.warning("Please enter your OpenAI API key to use the application.")
         return
@@ -48,7 +53,11 @@ def main():
             # Process the EPUB file
             output_path = os.path.join(temp_dir, "output")
             backup_path = os.path.join(temp_dir, "backup")
-            xhtml_path, ncx_file_path, opf_file_path = process_epub(epub_path, output_path, backup_path)
+            try:
+                xhtml_path, ncx_file_path, opf_file_path = process_epub(epub_path, output_path, backup_path)
+            except Exception as e:
+                st.error(f"Error processing EPUB file: {str(e)}")
+                return
 
             # Language selection
             source_lang = st.selectbox("Select source language", ["English", "Spanish", "French", "German"])
@@ -70,23 +79,32 @@ def main():
                     
                     progress_bar = st.progress(0)
                     
-                    if all_files:
-                        translate(xhtml_path, source_lang, target_lang, client, OPENAI_MODEL)
-                        translated_paragraphs = total_paragraphs
-                    else:
-                        for file in files_to_translate:
-                            translate(os.path.join(xhtml_path, file), source_lang, target_lang, client, OPENAI_MODEL)
-                            translated_paragraphs += len(open(os.path.join(xhtml_path, file)).read().split('<p>')) - 1
-                            
-                            # Update progress bar
-                            progress = (translated_paragraphs / total_paragraphs)
-                            progress_bar.progress(progress)
+                    try:
+                        if all_files:
+                            for file in os.listdir(xhtml_path):
+                                translate_text(os.path.join(xhtml_path, file), source_lang, target_lang, client, OPENAI_MODEL)
+                                translated_paragraphs += len(open(os.path.join(xhtml_path, file)).read().split('<p>')) - 1
+                                progress = (translated_paragraphs / total_paragraphs)
+                                progress_bar.progress(progress)
+                        else:
+                            for file in files_to_translate:
+                                translate_text(os.path.join(xhtml_path, file), source_lang, target_lang, client, OPENAI_MODEL)
+                                translated_paragraphs += len(open(os.path.join(xhtml_path, file)).read().split('<p>')) - 1
+                                progress = (translated_paragraphs / total_paragraphs)
+                                progress_bar.progress(progress)
+                    except Exception as e:
+                        st.error(f"Error during translation: {str(e)}")
+                        return
 
                 st.success("Translation completed!")
 
                 # Create the translated EPUB
                 translated_epub_path = os.path.join(temp_dir, f"translated_{uploaded_file.name}")
-                create_epub(output_path, translated_epub_path)
+                try:
+                    create_epub(output_path, translated_epub_path)
+                except Exception as e:
+                    st.error(f"Error creating translated EPUB: {str(e)}")
+                    return
 
                 # Offer download of the translated EPUB
                 with open(translated_epub_path, "rb") as file:
