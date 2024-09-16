@@ -10,39 +10,35 @@ from openai import OpenAI
 # Load environment variables from .env file
 load_dotenv()
 
+# Set page config at the very beginning
+st.set_page_config(page_title="EPUB Translator", layout="wide")
+
+# Function to get API key from environment or user input
+def get_api_key(key_name, env_var_name):
+    api_key = os.getenv(env_var_name)
+    if not api_key:
+        # Prompt user to input API key if not found in environment
+        api_key = st.text_input(f"Enter your {key_name} API key:", type="password")
+    return api_key
+
 def main():
     st.title("EPUB Translator")
 
-    # Check for API key in environment variables
-    api_key = os.getenv("OPENAI_API_KEY")
-    
-    # If API key is not in environment, prompt user to input it
-    if not api_key:
-        api_key = st.text_input("Enter your OpenAI API Key:", type="password")
-        if not api_key:
-            st.warning("Please enter a valid OpenAI API key to proceed.")
-            return
+    # Set up API keys
+    OPENAI_API_KEY = get_api_key("OpenAI", 'OPENAI_API_KEY')
+    OPENAI_MODEL = st.text_input("Enter your OpenAI model (e.g., gpt-4o-mini):", value="gpt-4o-mini")
 
-    # Initialize OpenAI client only when API key is available
-    client = None
-    if api_key:
-        try:
-            client = OpenAI(api_key=api_key)
-        except Exception as e:
-            st.error(f"Failed to initialize OpenAI client: {e}")
-            return
-
-    # Check for model in environment variables
-    openai_model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # Default to gpt-4o-mini
-
-    # Prompt user for model if not set
-    if not openai_model:
-        openai_model = st.selectbox("Select OpenAI model:", ["gpt-3.5-turbo", "gpt-4o-mini", "gpt-4"])
+    # Initialize client
+    if OPENAI_API_KEY:
+        client = OpenAI(api_key=OPENAI_API_KEY)
+    else:
+        st.warning("Please enter your OpenAI API key to use the application.")
+        return
 
     # File upload
     uploaded_file = st.file_uploader("Upload an EPUB file", type="epub")
 
-    if uploaded_file is not None and client is not None:
+    if uploaded_file is not None:
         # Create a temporary directory to store the uploaded file
         with tempfile.TemporaryDirectory() as temp_dir:
             epub_path = os.path.join(temp_dir, uploaded_file.name)
@@ -72,17 +68,19 @@ def main():
                     total_paragraphs = sum(len(open(os.path.join(xhtml_path, file)).read().split('<p>')) - 1 for file in os.listdir(xhtml_path))
                     translated_paragraphs = 0
                     
+                    progress_bar = st.progress(0)
+                    
                     if all_files:
-                        translate(xhtml_path, source_lang, target_lang, client, openai_model)
-                        translated_paragraphs += total_paragraphs
+                        translate(xhtml_path, source_lang, target_lang, client, OPENAI_MODEL)
+                        translated_paragraphs = total_paragraphs
                     else:
                         for file in files_to_translate:
-                            translate(os.path.join(xhtml_path, file), source_lang, target_lang, client, openai_model)
+                            translate(os.path.join(xhtml_path, file), source_lang, target_lang, client, OPENAI_MODEL)
                             translated_paragraphs += len(open(os.path.join(xhtml_path, file)).read().split('<p>')) - 1
                             
                             # Update progress bar
-                            progress = (translated_paragraphs / total_paragraphs) * 100
-                            st.progress(progress)
+                            progress = (translated_paragraphs / total_paragraphs)
+                            progress_bar.progress(progress)
 
                 st.success("Translation completed!")
 
